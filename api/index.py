@@ -168,5 +168,5 @@ def save_team_info():
     return render_template("simulation.html", teams=countries, players=players, my_team=my_team) 
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
+#if __name__ == "__main__":
+    #app.run(debug=True)
