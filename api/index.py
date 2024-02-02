@@ -16,7 +16,7 @@ app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 assets = Environment(app)
-css = Bundle("src/main.css", output="dist/main.css")
+css = Bundle("src/main.css", output="dist/style.css")
 js = Bundle("src/*.js", output="dist/main.js") # new
 
 assets.register("css", css)
