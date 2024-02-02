@@ -4,7 +4,6 @@ from flask import Flask, render_template, request, session
 from flask_assets import Bundle, Environment
 from flask_session import Session
 
-from todo import todos
 from game import *
 from data import *
 import random
@@ -40,20 +39,6 @@ def homepage():
         
     return render_template("simulation.html", teams=countries, players=players, my_team=my_team)
 
-
-@app.route("/search", methods=["POST"])
-def search_todo():
-    search_term = request.form.get("search")
-
-    if not len(search_term):
-        return render_template("todo.html", todos=[])
-
-    res_todos = []
-    for todo in todos:
-        if search_term in todo["title"]:
-            res_todos.append(todo)
-
-    return render_template("todo.html", todos=res_todos)
 
 @app.route("/simulate", methods=["GET"])
 def simulate():
