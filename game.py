@@ -1,17 +1,29 @@
 import math
 import random
-from data import score_options, weights, players, countries, bowling_options
-   
+from data import score_options, score_weights, players, countries, bowling_options, pitch_conditions, pitch_conditions_weights 
+from utils import *   
+
 class Tournament:
     
-    def __init__(self, name):
+    
+    def __init__(self, name, teams=None, my_team=None):
         self.name = name
+        self.my_team = my_team
         self.teams = {}
-        for country in countries:
-            self.teams[country] = Team(country)
+        if self.my_team:
+            self.teams[my_team] = Team(my_team)
+        
+        if teams:
+            for t in teams:
+                self.teams[t] = Team(t)
+        else:    
+            for country in countries:
+                self.teams[country] = Team(country)
+                
         self.fixtures= self.setFixtures()
         self.players = self.setPlayers()
-        self.player_stats = self.setPlayerStats()
+        self.batting_stats = self.setBattingStats()
+        self.bowling_stats = self.setBowlingStats()
         
     def setFixtures(self):
         fixtures = {}
@@ -35,20 +47,28 @@ class Tournament:
 
         return all_players
     
-    def setPlayerStats(self):
-        all_player_stats = {}
+    def setBattingStats(self):
+        all_batting_stats = {}
         
         for team in self.teams:
             for player in players[team]:
-                all_player_stats[player] = Stats(player)
+                all_batting_stats[player] = BattingStats(player)
 
-        return all_player_stats
+        return all_batting_stats
+    
+    def setBowlingStats(self):
+        all_bowling_stats = {}
+        
+        for team in self.teams:
+            for player in players[team]:
+                all_bowling_stats[player] = BowlingStats(player)
+
+        return all_bowling_stats
     
     def getTeam(self, team):
         return self.teams[team]
         
                     
-
 class Team:
       
     def __init__(self, name):
@@ -56,6 +76,8 @@ class Team:
         self.players = []
         self.scores = {}
         self.stats = TeamStats(name)
+        self.timeline = ""
+        self.fall_of_wickets = []
 
         for player in players[name]:
             self.players.append(Player(player))
@@ -69,8 +91,7 @@ class Team:
     def __str__(self):
         return self.name
     
-                      
-        
+                            
 class Player:
     
     def __init__(self, name):
@@ -112,8 +133,7 @@ class Player:
         self.did_not_bat = False
         self.out = True
         
-               
-        
+                    
 class Match:
     
     target = 0
@@ -130,6 +150,8 @@ class Match:
         self.winner = {}
         self.loser = {}
         self.result = "Match Yet To Be played"
+        self.pitch_condition = random.choices(pitch_conditions, pitch_conditions_weights)[0]
+        
         
     def toss(self, team1, team2):
         toss = random.choice(["H", "T"])
@@ -154,31 +176,45 @@ class Match:
         self.setResult(tournament)
     
     def updateStats(self, tournament):
-        for player in self.team1.players:
-            player_stats = tournament.player_stats[player.name]
-            player_stats.matches_played += 1
-            player_stats.total_runs += player.runs
-            player_stats.balls_played += player.balls
-            if player.out:
-                player_stats.dismissed += 1
-            if not player.did_not_bat:
-                player_stats.innings += 1
-            player_stats.wickets += player.wickets
-            player_stats.balls_bowled += player.balls_bowled
-            player_stats.runs_conceded += player.runs_conceded
-            
-        for player in self.team2.players:
-            player_stats = tournament.player_stats[player.name]
-            player_stats.matches_played += 1
-            player_stats.total_runs += player.runs
-            player_stats.balls_played += player.balls
-            if player.out:
-                player_stats.dismissed += 1
-            if not player.did_not_bat:
-                player_stats.innings += 1
-            player_stats.wickets += player.wickets
-            player_stats.balls_bowled += player.balls_bowled
-            player_stats.runs_conceded += player.runs_conceded
+        for team in [self.team1, self.team2]:
+            for player in team.players:
+                batting_stats = tournament.batting_stats[player.name]
+                bowling_stats = tournament.bowling_stats[player.name]
+                #Batting Stats
+                batting_stats.matches_played += 1               
+                batting_stats.total_runs += player.runs
+                batting_stats.balls_played += player.balls
+                if player.out:
+                    batting_stats.dismissed += 1
+                if not player.did_not_bat:
+                    batting_stats.innings += 1
+                if batting_stats.highest_score < player.runs:
+                    batting_stats.highest_score = player.runs
+                    batting_stats.highest_score_balls = player.balls
+                    if not player.out:
+                        batting_stats.highest_score_out = False
+                        
+                if player.runs >= 50:
+                    batting_stats.fifties += 1
+                if player.runs >= 100:
+                    batting_stats.hundreds += 1
+                    batting_stats.fifties -= 1
+                #Bowling Stats
+                bowling_stats.matches_played += 1 
+                bowling_stats.wickets += player.wickets
+                bowling_stats.balls_bowled += player.balls_bowled
+                bowling_stats.runs_conceded += player.runs_conceded
+                if player.wickets >=5:
+                    bowling_stats.fifers += 1
+                if player.wickets > bowling_stats.top_perf_wickets:
+                    bowling_stats.top_perf_wickets = player.wickets
+                    bowling_stats.top_perf_runs_conceded = player.runs_conceded
+                elif player.wickets == bowling_stats.top_perf_wickets:
+                    if player.runs_conceded < bowling_stats.runs_conceded:
+                        bowling_stats.top_perf_wickets = player.wickets
+                        bowling_stats.top_perf_runs_conceded = player.runs_conceded
+                    
+                
         
     def setResult(self, tournament):
             
@@ -235,9 +271,15 @@ class Match:
         self.player_on_strike = team1.players[0]
         self.player_on_strike.batted()
         self.player_on_non_strike = team1.players[1]
+        
+        # Set Bowler
+        if team2.name not in bowling_options:
+            bowling_options[team2.name] = bowling_options['Team X']
+        print(len(team2.players))
+        print(len(bowling_options[team2.name]))
         self.bowler = random.choices(team2.players, bowling_options[team2.name])[0]
         
-        over_counter = 0
+        ball_counter = 0
 
             
         while wickets < 10 and balls < 120 :
@@ -245,7 +287,7 @@ class Match:
             if self.target != 0 and runs >= self.target:
                 break
             
-            choice = random.choices(score_options, weights)
+            choice = random.choices(score_options, score_weights[self.pitch_condition])
             result = choice[0]
             results = results + result + " "
             
@@ -290,8 +332,11 @@ class Match:
                 self.player_on_strike.got_out()
                 self.bowler.ballBowled(0,1)
                 self.bowler.addWicket()
+                team1.fall_of_wickets.append("<strong>" + str(runs) + "/" + str(wickets) + "</strong><span class='px-2 font-semibold'>" + Utils.ballsToOvers(balls) + "</span>" +self.player_on_strike.name)
+                print(wickets)
                 if wickets != 10:
                     self.player_on_strike = team1.players[wickets+1]
+                
 
             if(result == "1Ro"):
                 balls = balls + 1
@@ -435,15 +480,21 @@ class Match:
                 break
             
             if result not in ["Nb","1Nb","2Nb","3Nb","4Nb","6Nb","Wd","1Wd"]:
-                over_counter += 1
-                if over_counter % 6 == 0:
+                ball_counter += 1
+                if ball_counter % 6 == 0:
                     self.bowler.overs_bowled += 1
                     self.strike_change()
                     ##New Blower
                     bowler = random.choices(team2.players, bowling_options[team2.name])[0]
-                    while bowler == self.bowler or bowler.balls_bowled >= 30:
+                    while bowler == self.bowler or bowler.balls_bowled >= 24:
                         bowler = random.choices(team2.players, bowling_options[team2.name])[0]
                     self.bowler = bowler
+                    #set timeline
+                    team1.timeline += result + "<br />"
+                else:
+                    team1.timeline += result + " "
+                    
+            
             
                 
         if self.target == 0:
@@ -453,13 +504,8 @@ class Match:
         team1.scores[self.key].wickets = wickets
         team1.scores[self.key].balls = balls
         team1.scores[self.key].extras = extras                  
-        team1.scores[self.key].setScorecard(results)
-        
-            
-            
-
-            
-    
+        team1.scores[self.key].setScorecard(team1)
+           
     
 class Score:
     
@@ -474,13 +520,15 @@ class Score:
         self.balls = 0
         self.extras = 0
         
-    def setScorecard(self, results):
+    def setScorecard(self, team):
         scorecard = "<div class='rounded border-0 bg-gray-100 p-2 my-3'>"
-        scorecard = scorecard + "<span class='mb-2 text-lg font-bold tracking-tight text-gray-600 dark:text-white'>"+ str(self.runs)+ "/"+ str(self.wickets) + "</span><br />"
-        scorecard = scorecard + "<span class='mb-2 text-md font-bold tracking-tight text-gray-500 dark:text-white'>"+ str(math.floor(self.balls/6))+"."+str(self.balls%6) + " Overs </span><br />"
-        scorecard = scorecard + "<span class='mb-2 text-md font-bold tracking-tight text-gray-400 dark:text-white'>Extras: "+ str(self.extras) + "</span></div>"
+        scorecard = scorecard + "<span class='mb-2 text-lg font-mono tracking-tight text-black dark:text-white'>"+ str(self.runs)+ "/"+ str(self.wickets) + "</span><br />"
+        scorecard = scorecard + "<span class='mb-2 text-md font-mono tracking-tight text-black dark:text-white'>"+ str(math.floor(self.balls/6))+"."+str(self.balls%6) + " Overs </span><br />"
+        scorecard = scorecard + "<span class='mb-2 text-md font-mono tracking-tight text-black dark:text-white'>Extras: "+ str(self.extras) + "</span></div>"
         
-        scorecard = scorecard + "<div class='bg-green-100 p-2 m-3'>"
+        #Set Short Score
+        self.score = scorecard
+        scorecard = scorecard + "<div class='p-2 m-3'>"
         for player in self.team.players:
             if not player.did_not_bat:
                 scorecard = scorecard + "<p><strong>"+ player.name + "</strong> "+ str(player.runs)
@@ -488,13 +536,17 @@ class Score:
                     scorecard = scorecard + "*"
                 scorecard = scorecard + "("+ str(player.balls) + ")</p>"
             else:
-                scorecard = scorecard + "<p><strong>"+ player.name +"</strong> Did Not Bat</p>"
+                scorecard = scorecard + "<p><strong>"+ player.name +"</strong> DNB</p>"
         scorecard = scorecard + "</div>"
-        #scorecard = scorecard + "<hr /><p>Timeline: "+ results + "</p>"
+        # Bowlers
         scorecard = scorecard + "<div>"
         for player in self.opponent.players:
             if player.getOvers() != "0":
                 scorecard = scorecard + "<p><strong>"+ player.name + "</strong> " + str(player.getOvers()) + " - " + str(player.runs_conceded) + " - "+ str(player.wickets) + "</p>" 
+        scorecard += "<p class='text-md font-semibold p-3 uppercase'>Fall Of Wickets<p>"
+        for fall_of_wicket in team.fall_of_wickets:
+            scorecard += "<h6 class='px-3 text-md text-purple-800'>" + fall_of_wicket + "</h6>"
+        scorecard = scorecard + "<p class='text-lg text-lime-700 font-semibold px-1 mt-3 uppercase'><strong>Timeline</strong><br /> "+ team.timeline + "</p>"
         scorecard = scorecard + "</div>"   
         
         self.scorecard = scorecard
@@ -506,9 +558,14 @@ class Score:
     
 class Game:
     
-    def setTournament(self, name):
-        self.tournament = Tournament(name)
-            
+    def __init__(self) -> None:
+        pass
+    
+    def setTournament(self, name, teams=None, my_team=None):
+        if my_team:
+            self.tournament = Tournament(name, teams, my_team)   
+        else:
+             self.tournament = Tournament(name)         
     
     def simulate(self):
         for fixture in self.tournament.fixtures:
@@ -517,8 +574,11 @@ class Game:
             match.updateStats(self.tournament)
             
         self.tournament.teams = dict(sorted(self.tournament.teams.items(), key=lambda item: (item[1].stats.points, item[1].stats.getNRR()), reverse=True))
-        self.tournament.player_stats = dict(sorted(self.tournament.player_stats.items(), key= lambda item: item[1].total_runs, reverse=True))
-            
+        self.tournament.batting_stats = dict(sorted(self.tournament.batting_stats.items(), key= lambda item: item[1].total_runs, reverse=True))
+        self.tournament.bowling_stats = dict(sorted(self.tournament.bowling_stats.items(), key= lambda item: item[1].wickets, reverse=True))
+        #Remove Players who did not ball
+        self.tournament.bowling_stats = dict(filter(lambda item: not(isinstance(item[1].getOversBowled(), str) and item[1].getOversBowled() == "NA"), self.tournament.bowling_stats.items()))  
+ 
  
 class TeamStats:
     
@@ -551,7 +611,7 @@ class TeamStats:
         self.matches_played = self.matches_played + 1
            
 
-class Stats:
+class BattingStats:
     
     def __init__(self, player):
         self.player = player
@@ -563,13 +623,9 @@ class Stats:
         self.dismissed = 0
         self.fifties = 0
         self.hundreds = 0
-        
-        #Bowling
-        self.fifers = 0
-        self.balls_bowled = 0
-        self.wickets = 0
-        self.overs_bowled = 0
-        self.runs_conceded = 0
+        self.highest_score = 0
+        self.highest_score_out = True
+        self.highest_score_balls = 0
 
         
     def getStrikerate(self):
@@ -582,20 +638,45 @@ class Stats:
             return str(round(self.total_runs/self.dismissed, 2))
         return "NA"
     
+    def getHighestScore(self):
+        score = str(self.highest_score)
+        if not self.highest_score_out:
+            score = score + "*"
+        score = score + "("+ str(self.highest_score_balls) + ")"
+        return score
+
+
+class BowlingStats:
+    
+    def __init__(self, player):
+        self.player = player
+        self.matches_played = 0
+        self.fifers = 0
+        self.balls_bowled = 0
+        self.wickets = 0
+        self.overs_bowled = 0
+        self.runs_conceded = 0
+        self.top_perf_wickets = 0
+        self.top_perf_runs_conceded = 0
+
+    
     def getOversBowled(self):
         if self.balls_bowled >0:
             return str(math.floor(self.balls_bowled/6)) + "." +str(self.balls_bowled % 6)
         else:
-            return "0"
+            return "NA"
       
     def getBowlingAverage(self):
         if self.balls_bowled >0:
-            return str(round(self.runs_conceded*6/self.balls_bowled, 2))
+            return str(round(self.runs_conceded*6/self.balls_bowled, 1))
         return "NA"
     
     def getBowlingStrikeRate(self):
         if self.wickets >0:
             return str(round(self.balls_bowled/self.wickets))
         return "NA"
+    
+    def getBestFigures(self):
+        return str(self.top_perf_wickets) + "/" + str(self.top_perf_runs_conceded)
 
     

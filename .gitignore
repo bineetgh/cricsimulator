@@ -4,3 +4,4 @@ node_modules/
 venv/
 static/.webassets-cache/
 static/dist/
+flask_session/

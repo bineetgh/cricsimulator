@@ -27,7 +27,18 @@ js.build() # new
 
 @app.route("/")
 def homepage():
-    return render_template("index.html")
+    print(session)
+    if "my_team" in session:
+        my_team = session["my_team"]
+    else:
+        my_team = "Team X"
+    
+    if "my_team_players" in session:
+        players[my_team] = session["my_team_players"]
+    else:
+        my_team = "Team X"
+        
+    return render_template("simulation.html", teams=countries, players=players, my_team=my_team)
 
 
 @app.route("/search", methods=["POST"])
@@ -46,25 +57,71 @@ def search_todo():
 
 @app.route("/simulate", methods=["GET"])
 def simulate():
-    session.clear()
-    return render_template("simulation.html")
+    return render_template("simulation.html", teams=countries)
 
 @app.route("/tournament", methods=["GET"])
 def tournament():
     game = Game()
     game.setTournament("ICC")
-    session.clear()
     session['tournament'] = game.tournament
     return render_template("tournament.html", tournament=game.tournament)
 
 @app.route("/simulate-all", methods=["GET"])
 def simulate_all():
     game = Game()
-    game.setTournament("ICC")
+    if "my_team" in session:
+        my_team = session["my_team"]
+    else:
+        my_team = "Team X"
+    
+    if "my_team_players" in session:
+        players[my_team] = session["my_team_players"]
+    else:
+        my_team = "Team X"
+        
+    name = "ICC WT20"
+    game.setTournament(name, None, my_team)
     game.simulate()
     session['tournament'] = game.tournament
     return render_template("tournament-simulated.html", tournament=game.tournament)
-    
+  
+  
+@app.route("/simulate-a-tournament", methods=["GET", "POST"])
+def simulate_a_tournament():
+    if request.method == "POST":
+        game = Game()
+        teams = request.form.getlist('teams')
+        if "my_team" in session:
+            my_team = session["my_team"]
+        else:
+            my_team = "Team X"
+            
+        if "my_team_players" in session:
+            players[my_team] = session["my_team_players"]
+        else:
+            my_team = "Team X"
+            
+        game.setTournament("WT20I Tournament", teams, my_team)
+        game.simulate()
+        return render_template("tournament-simulated.html", tournament=game.tournament)  
+    else:
+        game = Game()
+        
+        if "my_team" in session:
+            my_team = session["my_team"]
+        else:
+            my_team = "Team X"
+            
+        if "my_team_players" in session:
+            players[my_team] = session["my_team_players"]
+        else:
+            my_team = "Team X"
+        
+        
+        game.setTournament("WT20I Tournament", countries, my_team)
+        game.simulate()
+        return render_template("tournament-simulated.html", tournament=game.tournament) 
+        
     
 @app.route("/scorecard", methods=["GET"])
 def scorecard():
@@ -83,15 +140,11 @@ def scorecard():
         countries.append(pick1)
         t2 = pick2
 
-    if 'tournament' in session:
-        tournament = session['tournament']
-    else:
-        tournament = Tournament("ICC WT20")
+    tournament = Tournament("ICC WT20", None, t1)
         
     match = Match("T20I", t1, t2, seq) 
     
     match.simulate(tournament)
-    session['tournament'] = tournament
 
     info['result'] = match.result     
     info['team1'] = match.team1
@@ -99,6 +152,20 @@ def scorecard():
      
     return render_template("scorecard.html", info=info, tournament=tournament)
     
+
+
+@app.route("/save-team-info", methods=["POST", "GET"])
+def save_team_info():
+    my_team = request.form.get("my_team_name", "")
+    my_team_players = []
+    for i in range(1, 12):
+        print(i)
+        player = request.form.get(str(i), "")      
+        my_team_players.append(player)
+    session['my_team_players'] = my_team_players
+    session['my_team'] = my_team
+    players[my_team] = my_team_players
+    return render_template("simulation.html", teams=countries, players=players, my_team=my_team) 
 
 
 if __name__ == "__main__":
