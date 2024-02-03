@@ -7,6 +7,15 @@ from flask_session import Session
 from game import *
 from data import *
 import random
+import json
+
+import redis
+
+r = redis.StrictRedis(
+  host='redis-13471.c301.ap-south-1-1.ec2.cloud.redislabs.com',
+  port=13471,
+  password='ADufRBbkEYRnlCpWmc25QPA3qPrBwcDl',
+  decode_responses=True)
 
 
 app = Flask(__name__)
@@ -24,25 +33,29 @@ css.build()
 js.build() # new
 
 
+def set_my_team():
+    my_team = r.get("my_team")
+    
+    if not my_team:
+        my_team = "Team X"
+        r.set("my_team", my_team)
+    
+    my_players = r.get( "my_players")
+    if my_players:
+        players[my_team] = json.loads(my_players)
+    else:
+        my_team = "Team X"
+        r.set("my_team", my_team)
+        
+    return my_team
+
+
 @app.route("/")
 def homepage():
-    print(session)
-    if "my_team" in session:
-        my_team = session["my_team"]
-    else:
-        my_team = "Team X"
-    
-    if "my_team_players" in session:
-        players[my_team] = session["my_team_players"]
-    else:
-        my_team = "Team X"
+    my_team = set_my_team()
         
-    return render_template("simulation.html", teams=countries, players=players, my_team=my_team)
+    return render_template("index.html", teams=countries, players=players, my_team=my_team)
 
-
-@app.route("/simulate", methods=["GET"])
-def simulate():
-    return render_template("simulation.html", teams=countries)
 
 @app.route("/tournament", methods=["GET"])
 def tournament():
@@ -54,16 +67,7 @@ def tournament():
 @app.route("/simulate-all", methods=["GET"])
 def simulate_all():
     game = Game()
-    if "my_team" in session:
-        my_team = session["my_team"]
-    else:
-        my_team = "Team X"
-    
-    if "my_team_players" in session:
-        players[my_team] = session["my_team_players"]
-    else:
-        my_team = "Team X"
-        
+    my_team = set_my_team()        
     name = "ICC WT20"
     game.setTournament(name, None, my_team)
     game.simulate()
@@ -76,33 +80,16 @@ def simulate_a_tournament():
     if request.method == "POST":
         game = Game()
         teams = request.form.getlist('teams')
-        if "my_team" in session:
-            my_team = session["my_team"]
-        else:
-            my_team = "Team X"
-            
-        if "my_team_players" in session:
-            players[my_team] = session["my_team_players"]
-        else:
-            my_team = "Team X"
-            
-        game.setTournament("WT20I Tournament", teams, my_team)
+        rounds = request.form.get('rounds')
+        my_team = set_my_team()            
+        game.setTournament("WT20I Tournament", teams, my_team, rounds)
         game.simulate()
         return render_template("tournament-simulated.html", tournament=game.tournament)  
     else:
         game = Game()
         
-        if "my_team" in session:
-            my_team = session["my_team"]
-        else:
-            my_team = "Team X"
+        my_team = set_my_team()
             
-        if "my_team_players" in session:
-            players[my_team] = session["my_team_players"]
-        else:
-            my_team = "Team X"
-        
-        
         game.setTournament("WT20I Tournament", countries, my_team)
         game.simulate()
         return render_template("tournament-simulated.html", tournament=game.tournament) 
@@ -142,16 +129,18 @@ def scorecard():
 @app.route("/save-team-info", methods=["POST", "GET"])
 def save_team_info():
     my_team = request.form.get("my_team_name", "")
-    my_team_players = []
-    for i in range(1, 12):
-        print(i)
+    my_players = []
+    for i in range(1, 16):
         player = request.form.get(str(i), "")      
-        my_team_players.append(player)
-    session['my_team_players'] = my_team_players
-    session['my_team'] = my_team
-    players[my_team] = my_team_players
-    return render_template("simulation.html", teams=countries, players=players, my_team=my_team) 
+        my_players.append(player)
+                 
+    players[my_team] = my_players
+    
+    r.set("my_team", my_team) 
+    r.set("my_players", json.dumps(my_players))  
+    
+    return render_template("index.html", teams=countries, players=players, my_team=my_team) 
 
 
-#if __name__ == "__main__":
-    #app.run(debug=True)
+if __name__ == "__main__":
+    app.run(debug=True)

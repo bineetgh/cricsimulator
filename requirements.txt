@@ -3,3 +3,5 @@ Flask-Assets==2.0
 pytailwindcss==0.1.4
 Werkzeug==2.2.2
 Flask-Session==0.6.0
+redis==5.0.1
+numpy==1.26.3
